@@ -32,6 +32,7 @@
 #define TEXT_YELLOW     0xFFE0
 #define TEXT_CYAN       0x07FF
 #define COLOR_RED       0xF800
+#define COLOR_YELLOW    0xFEE0 // Amarelo para o bloco BZR
 
 // ESTADOS DO JOGO
 enum GameState { TELA_DESLIGADA, MENU, PHASE_SELECT, DIALOGO, PUZZLE, SUCESSO, FINAL };
@@ -59,13 +60,13 @@ PhaseData fases[4] = {
     },
     {
         "Fase 3 - Buzzer", 
-        {"Fase 3: hora do barulho!", "O circuito precisa de som!", "Conecte a Bat, Res, LED e BTN.", "Se validar com sucesso...", "O buzzer real vai tocar!"}, 5, 
-        "BARULHO PERFEITO!", "Circuito completo com som!"
+        {"Fase 3: hora do som!", "Agora o Buzzer (BZR) esta na grade!", "Apenas Bat, Resistor e o bloco BZR.", "O botao descansará nesta fase.", "Bora fazer barulho, baiano!"}, 5, 
+        "BARULHO PERFEITO!", "Circuito com som funcionando!"
     },
     {
         "Fase 4 - Completo", 
-        {"ULTIMA FASE, campeao!", "Use TUDO que aprendeu!", "Bat + res + LED + fiação + BTN", "Se funcionar... ESCAPOU!", "Tesla e eu orgulhosos!"}, 5, 
-        "REI DOS CIRCUITOS!", "Circuito perfeito!"
+        {"ULTIMA FASE, campeao!", "O DESAFIO FINAL!", "BTN e BZR estao separados!", "Ligue Bat + Res + LED + BTN + BZR", "Se funcionar... ESCAPOU!"}, 5, 
+        "REI DOS CIRCUITOS!", "Circuito perfeito completo!"
     }
 };
 
@@ -76,7 +77,7 @@ int dialogoIndex = 0;
 bool unlocked[4] = {true, false, false, false};
 
 // Configurações da Grade 5x4
-// 0=Vazio, 1=RES, 2=BAT, 3=WIRE, 4=LED, 9=BTN (Fixo por cenário)
+// 0=Vazio, 1=RES, 2=BAT, 3=WIRE, 4=LED, 8=BZR (Fixo amarelo), 9=BTN (Fixo branco)
 int gradeCircuitos[5][4] = {0}; 
 int componenteSelecionado = 1; 
 int componenteFocadoMenu = 1;
@@ -87,9 +88,11 @@ const int offsetGridX = 52;
 const int offsetGridY = 25; 
 const int slotSize = 43;      
 
-// Posição predeterminada do bloco BTN fixo nas fases 2, 3 e 4
-const int btnFixoX = 2;
+// Posições predeterminadas dos blocos fixos na grade
+const int btnFixoX = 1;
 const int btnFixoY = 2;
+const int bzrFixoX = 3;
+const int bzrFixoY = 1;
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST); 
 
@@ -220,9 +223,14 @@ void loop() {
     if (digitalRead(BTN_A) == LOW) {
       pressionou = true;
       
-      // Impede o jogador de sobrescrever ou deletar o BTN fixo gerado pelo cenário
-      if (faseAtual >= 1 && cursorX == btnFixoX && cursorY == btnFixoY) {
-        emitirSom(300, 1); // Som de erro se tentar mexer no BTN fixo
+      // Impede o jogador de apagar ou alterar os blocos fixos gerados pelas regras da fase
+      bool celulaBloqueada = false;
+      if (faseAtual == 1 && cursorX == btnFixoX && cursorY == btnFixoY) celulaBloqueada = true;
+      if (faseAtual == 2 && cursorX == bzrFixoX && cursorY == bzrFixoY) celulaBloqueada = true;
+      if (faseAtual == 3 && ((cursorX == btnFixoX && cursorY == btnFixoY) || (cursorX == bzrFixoX && cursorY == bzrFixoY))) celulaBloqueada = true;
+
+      if (celulaBloqueada) {
+        emitirSom(300, 1); // Som de erro se tentar sobrescrever componente fixo
       } else {
         emitirSom(60, 1); 
         if (componenteSelecionado == 5) { 
@@ -248,7 +256,7 @@ void loop() {
       if (digitalRead(BTN_UP) == LOW) { 
         if (validarCircuito()) {
           estado = SUCESSO;
-          // Se for a fase 3 ou 4, o buzzer real faz a festa na vitória!
+          // Se for a fase 3 ou 4 (fases que envolvem o Buzzer), o hardware apita forte na vitória!
           if (faseAtual >= 2) {
             emitirSom(80, 5);
           } else {
@@ -260,7 +268,7 @@ void loop() {
           tft.setCursor(65, 90); tft.setTextColor(TEXT_YELLOW); tft.setTextSize(2);
           tft.print("ERRO ELETRICO!");
           tft.setCursor(55, 120); tft.setTextSize(1);
-          tft.print("CHEQUE BAT, RES E CONEXOES!");
+          tft.print("REVISE COMPONENTES E FIOS!");
           
           emitirSom(600, 1); 
           delay(1400); 
@@ -430,9 +438,18 @@ void reiniciarFase() {
   componenteSelecionado = 1;
   componenteFocadoMenu = 1;
 
-  // Se for Fase 2, 3 ou 4, injeta o componente fixo BTN (ID 9) no cenário predeterminado
-  if (faseAtual >= 1) {
+  // Fase 2: Injeta apenas o BTN (ID 9)
+  if (faseAtual == 1) {
     gradeCircuitos[btnFixoX][btnFixoY] = 9; 
+  }
+  // Fase 3: Injeta apenas o BZR (ID 8)
+  else if (faseAtual == 2) {
+    gradeCircuitos[bzrFixoX][bzrFixoY] = 8; 
+  }
+  // Fase 4: O Grande Desafio! Injeta ambos separados na grade
+  else if (faseAtual == 3) {
+    gradeCircuitos[btnFixoX][btnFixoY] = 9; 
+    gradeCircuitos[bzrFixoX][bzrFixoY] = 8; 
   }
 }
 
@@ -454,7 +471,7 @@ int contarVizinhosConectados(int x, int y) {
 }
 
 bool validarCircuito() {
-  int countRES = 0, countBAT = 0, countWIRE = 0, countLED = 0, countBTN = 0;
+  int countRES = 0, countBAT = 0, countWIRE = 0, countLED = 0, countBTN = 0, countBZR = 0;
   int componentesTotais = 0;
   bool possuiComponenteIsolado = false;
 
@@ -468,7 +485,8 @@ bool validarCircuito() {
         if (tipo == 2) countBAT++;
         if (tipo == 3) countWIRE++;
         if (tipo == 4) countLED++;
-        if (tipo == 9) countBTN++; // Registra o bloco BTN fixo
+        if (tipo == 8) countBZR++; // Bloco BZR Fixo
+        if (tipo == 9) countBTN++; // Bloco BTN Fixo
 
         if (contarVizinhosConectados(x, y) == 0) {
           possuiComponenteIsolado = true;
@@ -477,23 +495,25 @@ bool validarCircuito() {
     }
   }
 
-  // Validação elétrica base: Bateria e Resistor essenciais em absolutamente todas as fases
+  // Validação Elétrica Padrão: Bateria e Resistor são vitais e obrigatórios para todas as fases
   if (possuiComponenteIsolado || componentesTotais < 2 || countBAT < 1 || countRES < 1) {
     return false; 
   }
 
   switch (faseAtual) {
-    case 0: // Fase 1: Bat + Resistor + LED obrigatório
+    case 0: // Fase 1: Bateria + Resistor + LED
       return (countLED >= 1);
       
-    case 1: // Fase 2: Bat + Resistor + LED + Conectado ao BTN fixo através de WIRE
+    case 1: // Fase 2: Bateria + Resistor + LED + Interligado ao BTN fixo
       return (countLED >= 1 && countBTN == 1 && contarVizinhosConectados(btnFixoX, btnFixoY) >= 1);
       
-    case 2: // Fase 3: Bat + Resistor + LED + Conectado ao BTN + Exigência de som (valida montagem igual)
-      return (countLED >= 1 && countBTN == 1 && contarVizinhosConectados(btnFixoX, btnFixoY) >= 1);
+    case 2: // Fase 3: Bateria + Resistor + Interligado ao BZR fixo (Sem exigir LED nem BTN)
+      return (countBZR == 1 && contarVizinhosConectados(bzrFixoX, bzrFixoY) >= 1);
       
-    case 3: // Fase 4: Fase Final Completa
-      return (countLED >= 1 && countBTN == 1 && countWIRE >= 1);
+    case 3: // Fase 4: Desafio Final Integrado (Bat + Res + LED + BTN + BZR todos interconectados)
+      return (countLED >= 1 && countBTN == 1 && countBZR == 1 && 
+              contarVizinhosConectados(btnFixoX, btnFixoY) >= 1 && 
+              contarVizinhosConectados(bzrFixoX, bzrFixoY) >= 1);
       
     default:
       return false;
@@ -525,8 +545,8 @@ void desenharSlot(int x, int y) {
     tft.fillRect(px + 4, py + 14, 31, 10, ILI9341_ORANGE); 
     tft.setCursor(px + 11, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("RES"); 
   } 
-  else if (tipo == 2) {  // Atualizado para Bateria (BAT)
-    tft.fillRect(px + 4, py + 11, 31, 16, 0x7BE0); // Cinza/Verde metálico
+  else if (tipo == 2) {  
+    tft.fillRect(px + 4, py + 11, 31, 16, 0x7BE0); 
     tft.setCursor(px + 11, py + 15); tft.setTextColor(TEXT_WHITE); tft.print("BAT"); 
   } 
   else if (tipo == 3) {  
@@ -536,7 +556,12 @@ void desenharSlot(int x, int y) {
     tft.fillCircle(px + 19, py + 19, 9, COLOR_RED); 
     tft.setCursor(px + 16, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("L"); 
   }
-  else if (tipo == 9) { // Quadrado branco escrito BTN (Botão Predeterminado)
+  else if (tipo == 8) { // Quadrado AMARELO escrito BZR (Buzzer Predeterminado)
+    tft.fillRoundRect(px + 2, py + 2, currentSlotSize - 4, currentSlotSize - 4, 3, COLOR_YELLOW);
+    tft.setCursor(px + 11, py + 16); tft.setTextColor(PCB_DARK); tft.setTextSize(1);
+    tft.print("BZR");
+  }
+  else if (tipo == 9) { // Quadrado BRANCO escrito BTN (Botão Predeterminado)
     tft.fillRoundRect(px + 2, py + 2, currentSlotSize - 4, currentSlotSize - 4, 3, TEXT_WHITE);
     tft.setCursor(px + 11, py + 16); tft.setTextColor(PCB_DARK); tft.setTextSize(1);
     tft.print("BTN");
@@ -554,7 +579,7 @@ void desenharCursor(int x, int y, uint16_t cor) {
 void desenharUI() {
   tft.fillRoundRect(10, 203, 300, 34, 6, 0x2104); 
   tft.drawRoundRect(10, 203, 300, 34, 6, SLOT_GRAY); 
-  const char* labels[] = {"RES", "BAT", "WIRE", "LED", "DEL"}; // CAP alterado para BAT no menu
+  const char* labels[] = {"RES", "BAT", "WIRE", "LED", "DEL"}; 
   int btnWidth = 54; 
   for(int i = 0; i < 5; i++) { 
     int startX = 15 + (i * 58); 
