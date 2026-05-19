@@ -12,57 +12,65 @@
 #define TFT_LED   16  
 #define BUZZER    15
 
-// BOTÕES (BTN_UP movido do pino 1 para o pino 5 para evitar conflito serial)
-#define BTN_UP    21  // <--- Mude o fio do pino 1 para o pino 5
+// BOTÕES
+#define BTN_UP    21  
 #define BTN_DOWN  4
 #define BTN_LEFT  3
 #define BTN_RIGHT 2
 #define BTN_A     8 
 
+// PALETA DE CORES (RGB565)
 #define COLOR_UI_BLUE   0x035F 
-#define COLOR_BERTA_V   0x915F 
-#define PCB_GREEN       0x03E0 
-#define PCB_DARK        0x0200 
-#define SLOT_GRAY       0xAD75 
+#define PCB_DARK        0x0100 // Verde escuro de fundo bem elegante
+#define SLOT_GRAY       0x5AEB // Cinza médio para os slots desocupados
 #define CURSOR_GOLD     0xFDC0 
-#define COLOR_OUTLINE   0x0000 
+#define TEXT_WHITE      0xFFFF
+
+// Matriz para guardar o que foi colocado na grade (5 colunas x 4 linhas)
+// 0 = Vazio, 1 = RES, 2 = CAP, 3 = WIRE, 4 = LED
+int gradeCircuitos[5][4] = {0}; 
+
+// Estado do Componente Selecionado na UI Inferior (Começa com Resistor = 1)
+int componenteSelecionado = 1; 
+
+// Variáveis do Cursor (Indexados em 0)
+int cursorX = 0; 
+int cursorY = 0; 
+
+// Configuração de Layout para Tela de 2.8" (320x240)
+const int offsetGridX = 45;   // (320 - (5 * 46)) / 2 = Centralizado perfeitamente
+const int offsetGridY = 40;   // Margem superior para o título
+const int slotSize = 46;      // Tamanho do slot (42px) + espaçamento (4px)
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
-// Variáveis do Cursor
-int cursorX = 1; 
-int cursorY = 1; 
-int offsetGridX = 45;
-int offsetGridY = 40;
-int slotSize = 46;
-
 void desenharGrade();
+void desenharSlot(int x, int y);
 void desenharCursor(int x, int y, uint16_t cor);
 void desenharUI();
+void atualizarSelecaoMenu();
 
 void setup() {
-  // Configuração do Backlight (Lógica invertida para Protoboard em GND)
   pinMode(TFT_LED, OUTPUT);
-  digitalWrite(TFT_LED, LOW); // LOW acende o LED no seu circuito
+  digitalWrite(TFT_LED, LOW); // LOW acende o LED na sua placa
   
   pinMode(BUZZER, OUTPUT);
   
-  // Configuração correta de todos os botões no GND
   pinMode(BTN_UP, INPUT_PULLUP);
   pinMode(BTN_DOWN, INPUT_PULLUP);
   pinMode(BTN_LEFT, INPUT_PULLUP);
   pinMode(BTN_RIGHT, INPUT_PULLUP);
   pinMode(BTN_A, INPUT_PULLUP);
 
-  // CORREÇÃO CRÍTICA: Inicialização do SPI com os 4 pinos corretos da tela
   SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
   
   tft.begin();
-  tft.setRotation(1);
+  tft.setRotation(1); // Modo Paisagem (320x240)
 
   tft.fillScreen(PCB_DARK); 
   desenharGrade();
   desenharUI();
+  atualizarSelecaoMenu();
   desenharCursor(cursorX, cursorY, CURSOR_GOLD);
 
   delay(500);
@@ -73,44 +81,117 @@ void loop() {
   int oldY = cursorY;
   bool moveu = false;
 
-  // Movimentação por Grid (Lendo LOW quando pressionado contra o GND)
+  // Leitura dos botões
   if (digitalRead(BTN_UP) == LOW)    { cursorY--; moveu = true; delay(150); }
   if (digitalRead(BTN_DOWN) == LOW)  { cursorY++; moveu = true; delay(150); }
   if (digitalRead(BTN_LEFT) == LOW)  { cursorX--; moveu = true; delay(150); }
   if (digitalRead(BTN_RIGHT) == LOW) { cursorX++; moveu = true; delay(150); }
 
-  // Limites da grade (5x4)
-  if (cursorX < 0) cursorX = 0; if (cursorX > 4) cursorX = 4;
-  if (cursorY < 0) cursorY = 0; if (cursorY > 3) cursorY = 3;
-
-  if (moveu) {
-    tone(BUZZER, 800, 20);
-    // Apaga cursor antigo redesenhando o slot
-    tft.drawRoundRect(offsetGridX + (oldX * slotSize), offsetGridY + (oldY * slotSize), 42, 42, 4, SLOT_GRAY);
-    // Desenha novo cursor
-    desenharCursor(cursorX, cursorY, CURSOR_GOLD);
+  // Se mover, limita as bordas. Note que a linha 4 (y=4) é o menu inferior!
+  if (cursorY < 0) cursorY = 0;
+  
+  if (cursorY == 4) {
+    // Se está no menu inferior, limita o X para os 5 botões de componentes
+    if (cursorX < 0) cursorX = 0;
+    if (cursorX > 4) cursorX = 4;
+  } else {
+    // Se está na grade do circuito
+    if (cursorX < 0) cursorX = 0;
+    if (cursorX > 4) cursorX = 4;
+    if (cursorY > 3) cursorY = 4; // Entra no menu inferior se colocar pra baixo na última linha
   }
 
+  if (moveu) {
+    tone(BUZZER, 800, 15);
+    
+    // Apaga o cursor antigo redesenhando o que estava embaixo dele
+    if (oldY == 4) {
+      desenharUI(); // Redesenha a barra para limpar a borda dourada
+      atualizarSelecaoMenu();
+    } else {
+      desenharSlot(oldX, oldY);
+    }
+    
+    // Desenha o cursor na nova posição
+    if (cursorY == 4) {
+      // Destaca o botão do menu inferior
+      int btnWidth = 54;
+      int startX = 15 + (cursorX * 58);
+      tft.drawRoundRect(startX - 2, 198, btnWidth + 4, 34, 6, CURSOR_GOLD);
+    } else {
+      desenharCursor(cursorX, cursorY, CURSOR_GOLD);
+    }
+  }
+
+  // AÇÃO DO BOTÃO A
   if (digitalRead(BTN_A) == LOW) {
-    tone(BUZZER, 1200, 50);
-    tft.fillRect(offsetGridX + (cursorX * slotSize) + 10, offsetGridY + (cursorY * slotSize) + 15, 22, 12, ILI9341_ORANGE);
-    tft.setCursor(offsetGridX + (cursorX * slotSize) + 12, offsetGridY + (cursorY * slotSize) + 30);
-    tft.setTextColor(ILI9341_WHITE); tft.setTextSize(1); tft.print("RES");
-    delay(200);
+    tone(BUZZER, 1200, 40);
+    
+    if (cursorY == 4) {
+      // Seleciona o componente baseado na coluna atual do menu
+      componenteSelecionado = cursorX + 1; // 1=RES, 2=CAP, 3=WIRE, 4=LED, 5=DEL
+      atualizarSelecaoMenu();
+    } else {
+      // Aplica a ação na grade de circuitos
+      if (componenteSelecionado == 5) {
+        gradeCircuitos[cursorX][cursorY] = 0; // Deleta o componente
+      } else {
+        gradeCircuitos[cursorX][cursorY] = componenteSelecionado; // Posiciona o componente ativo
+      }
+      desenharSlot(cursorX, cursorY);
+      desenharCursor(cursorX, cursorY, CURSOR_GOLD); // Redesenha o cursor por cima
+    }
+    delay(250);
   }
 }
 
 void desenharGrade() {
+  // Cabeçalho Centralizado (320px de largura)
   tft.fillRoundRect(110, 5, 100, 25, 5, COLOR_UI_BLUE);
-  tft.setCursor(125, 12);
-  tft.setTextColor(ILI9341_WHITE);
+  tft.setCursor(132, 13);
+  tft.setTextColor(TEXT_WHITE);
+  tft.setTextSize(1);
   tft.print("PUZZLE 1");
 
+  // Renderiza toda a grade inicial
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 4; j++) {
-      tft.fillRoundRect(offsetGridX + (i * slotSize), offsetGridY + (j * slotSize), 42, 42, 4, 0x2104);
-      tft.drawRoundRect(offsetGridX + (i * slotSize), offsetGridY + (j * slotSize), 42, 42, 4, SLOT_GRAY);
+      desenharSlot(i, j);
     }
+  }
+}
+
+// Renderiza um slot específico baseado no seu estado atual na matriz
+void desenharSlot(int x, int y) {
+  int px = offsetGridX + (x * slotSize);
+  int py = offsetGridY + (y * slotSize);
+  
+  // Limpa a área interna do slot
+  tft.fillRoundRect(px, py, 42, 42, 4, 0x18C3); // Fundo do slot desocupado
+  tft.drawRoundRect(px, py, 42, 42, 4, SLOT_GRAY); // Borda padrão
+
+  int tipo = gradeCircuitos[x][y];
+  
+  if (tipo == 1) { // RESISTOR
+    tft.fillRect(px + 6, py + 16, 30, 10, ILI9341_ORANGE);
+    tft.setCursor(px + 12, py + 18);
+    tft.setTextColor(TEXT_WHITE); tft.setTextSize(1);
+    tft.print("RES");
+  } 
+  else if (tipo == 2) { // CAPACITOR
+    tft.fillRect(px + 6, py + 16, 30, 10, ILI9341_BLUE);
+    tft.setCursor(px + 12, py + 18);
+    tft.setTextColor(TEXT_WHITE); tft.setTextSize(1);
+    tft.print("CAP");
+  } 
+  else if (tipo == 3) { // WIRE
+    tft.fillRect(px + 4, py + 19, 34, 4, ILI9341_WHITE); // Linha central branca
+  } 
+  else if (tipo == 4) { // LED
+    tft.fillCircle(px + 21, py + 21, 10, ILI9341_RED);
+    tft.setCursor(px + 13, py + 18);
+    tft.setTextColor(TEXT_WHITE); tft.setTextSize(1);
+    tft.print("L");
   }
 }
 
@@ -122,14 +203,30 @@ void desenharCursor(int x, int y, uint16_t cor) {
 }
 
 void desenharUI() {
-  tft.fillRoundRect(10, 200, 300, 35, 5, 0x3186);
-  tft.drawRoundRect(10, 200, 300, 35, 5, ILI9341_WHITE);
+  // Caixa externa do Menu Inferior
+  tft.fillRoundRect(10, 195, 300, 40, 6, 0x2104);
+  tft.drawRoundRect(10, 195, 300, 40, 6, SLOT_GRAY);
   
-  tft.setTextSize(1);
-  tft.setTextColor(ILI9341_WHITE);
-  tft.setCursor(25, 212); tft.print("RES");
-  tft.setCursor(85, 212); tft.print("CAP");
-  tft.setCursor(145, 212); tft.print("WIRE");
-  tft.setCursor(205, 212); tft.print("LED");
-  tft.setCursor(265, 212); tft.print("DEL");
+  // Desenha os 5 "botões" fixos da barra de ferramentas
+  const char* labels[] = {"RES", "CAP", "WIRE", "LED", "DEL"};
+  int btnWidth = 54;
+  
+  for(int i = 0; i < 5; i++) {
+    int startX = 15 + (i * 58);
+    tft.fillRoundRect(startX, 200, btnWidth, 30, 4, 0x3186);
+    tft.setCursor(startX + (btnWidth - (strlen(labels[i]) * 6)) / 2, 211);
+    tft.setTextColor(TEXT_WHITE);
+    tft.setTextSize(1);
+    tft.print(labels[i]);
+  }
+}
+
+// Aplica uma borda branca ou destaca o componente que está ativo para uso
+void atualizarSelecaoMenu() {
+  int idx = componenteSelecionado - 1;
+  int btnWidth = 54;
+  int startX = 15 + (idx * 58);
+  // Pinta uma borda branca fina indicando que este componente está selecionado para colocar na tela
+  tft.drawRoundRect(startX, 200, btnWidth, 30, 4, ILI9341_WHITE);
+  tft.drawRoundRect(startX + 1, 201, btnWidth - 2, 28, 4, ILI9341_WHITE);
 }
