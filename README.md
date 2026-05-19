@@ -8,4 +8,4 @@ Imagens do protótipo
 <img width="4160" height="3120" alt="IMG_20260519_165741_282" src="https://github.com/user-attachments/assets/612369d2-3163-4e7d-a768-2c6b166bcce5" />
 
 Imagem da simulação do protótipo, baseado no mesmo
-<img width="511" height="538" alt="CircuitoSIM" src="https://github.com/user-attachments/assets/433245ff-8392-458d-b7f0-38e01fa5fcd6" />
+<br><img width="511" height="538" alt="CircuitoSIM" src="https://github.com/user-attachments/assets/433245ff-8392-458d-b7f0-38e01fa5fcd6" />
