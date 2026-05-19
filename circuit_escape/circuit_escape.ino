@@ -2,7 +2,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 
-// PINOS DA TELA [cite: 1]
+// PINOS DA TELA
 #define TFT_CS    10
 #define TFT_DC    9
 #define TFT_RST   14
@@ -10,20 +10,20 @@
 #define TFT_SCK   12
 #define TFT_MISO  13  
 #define TFT_LED   16  
-#define BUZZER    15 // Pino I/O ligado ao módulo Low Level [cite: 1]
+#define BUZZER    15 // Pino I/O ligado ao módulo Low Level
 
-// BOTÕES DO D-PAD E AÇÃO [cite: 1]
+// BOTÕES DO D-PAD E AÇÃO
 #define BTN_UP    3   
 #define BTN_DOWN  4
 #define BTN_LEFT  5
 #define BTN_RIGHT 6
 #define BTN_A     8 
 
-// BOTÕES DE INTERAÇÃO DO MENU [cite: 1]
-#define BTN_X     7   // Navega/Troca (Menu ou Seleção) [cite: 1]
-#define BTN_Y     21  // Confirma / Avança Diálogo [cite: 2]
+// BOTÕES DE INTERAÇÃO DO MENU
+#define BTN_X     7   // Navega/Troca (Menu ou Seleção)
+#define BTN_Y     21  // Confirma / Avança Diálogo
 
-// PALETA DE CORES (RGB565) [cite: 2]
+// PALETA DE CORES (RGB565)
 #define COLOR_UI_BLUE   0x035F 
 #define PCB_DARK        0x0100 
 #define SLOT_GRAY       0x5AEB 
@@ -49,22 +49,22 @@ struct PhaseData {
 PhaseData fases[4] = {
     {
         "Fase 1 - Protecao", 
-        {"Ola Berta! Pronto para a Fase 1?", "Lembra: resistor e OBRIGATORIO!", "Se ligar LED direto...", "CUIDADO COM A FUMACA! :D", "Bora montar, prodigio baiano!"}, 5, 
-        "PRODIGIO", "Excelente! Circuito OK!"
+        {"Ola Berta! Pronto para a Fase 1?", "Lembra: resistor e OBRIGATORIO!", "Se ligar LED direto na bateria...", "CUIDADO COM A FUMACA! :D", "Bora montar, prodigio baiano!"}, 5, 
+        "PRODIGIO", "Excelente! Circuito OK com a bateria!"
     },
     {
         "Fase 2 - Botao", 
-        {"Fase 2 liberada, genio!", "Agora use o Push Button!", "O botao fica no caminho...", "Senao o LED fica sempre aceso!", "Nao aperta muito forte, hein?"}, 5, 
-        "MESTRE DO CONTROLE!", "O botao liga/desliga perfeito!"
+        {"Fase 2 liberada, genio!", "O botao (BTN) apareceu na grade!", "Ele esta fixo esperando conexao.", "Intercepte a corrente com ele!", "Nao aperta muito forte, hein?"}, 5, 
+        "MESTRE DO CONTROLE!", "O botao foi interligado perfeitamente!"
     },
     {
         "Fase 3 - Buzzer", 
-        {"Fase 3: hora do barulho!", "Coloque o Buzzer Passivo!", "Resistor continua obrigatorio.", "Senao o buzzer vai gritar!", "Bora fazer barulho baiano!"}, 5, 
-        "BARULHO PERFEITO!", "LED aceso + buzzer tocando!"
+        {"Fase 3: hora do barulho!", "O circuito precisa de som!", "Conecte a Bat, Res, LED e BTN.", "Se validar com sucesso...", "O buzzer real vai tocar!"}, 5, 
+        "BARULHO PERFEITO!", "Circuito completo com som!"
     },
     {
         "Fase 4 - Completo", 
-        {"ULTIMA FASE, campeao!", "Use TUDO que aprendeu!", "Bat + res + LED + bot + buz", "Se funcionar... ESCAPOU!", "Tesla e eu orgulhosos!"}, 5, 
+        {"ULTIMA FASE, campeao!", "Use TUDO que aprendeu!", "Bat + res + LED + fiação + BTN", "Se funcionar... ESCAPOU!", "Tesla e eu orgulhosos!"}, 5, 
         "REI DOS CIRCUITOS!", "Circuito perfeito!"
     }
 };
@@ -75,18 +75,23 @@ int selectedPhase = 0;
 int dialogoIndex = 0;
 bool unlocked[4] = {true, false, false, false};
 
-// Configurações da Grade 5x4 [cite: 2]
-int gradeCircuitos[5][4] = {0}; // [cite: 2]
-int componenteSelecionado = 1; // [cite: 3]
-int componenteFocadoMenu = 1; // [cite: 3]
+// Configurações da Grade 5x4
+// 0=Vazio, 1=RES, 2=BAT, 3=WIRE, 4=LED, 9=BTN (Fixo por cenário)
+int gradeCircuitos[5][4] = {0}; 
+int componenteSelecionado = 1; 
+int componenteFocadoMenu = 1;
 
-int cursorX = 0; // [cite: 4]
-int cursorY = 0; // [cite: 4]
-const int offsetGridX = 52;   // [cite: 5]
-const int offsetGridY = 25; // [cite: 5]
-const int slotSize = 43;      // [cite: 6]
+int cursorX = 0; 
+int cursorY = 0;
+const int offsetGridX = 52;   
+const int offsetGridY = 25; 
+const int slotSize = 43;      
 
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST); // [cite: 6]
+// Posição predeterminada do bloco BTN fixo nas fases 2, 3 e 4
+const int btnFixoX = 2;
+const int btnFixoY = 2;
+
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST); 
 
 // Protótipos das Funções
 void desenharGrade();
@@ -101,24 +106,23 @@ void renderizarEstado();
 void emitirSom(int delayUrb, int repeticoes);
 
 void setup() {
-  pinMode(TFT_LED, OUTPUT); // [cite: 7]
-  digitalWrite(TFT_LED, LOW); // Começa desligada [cite: 7]
+  pinMode(TFT_LED, OUTPUT); 
+  digitalWrite(TFT_LED, LOW); 
   
-  // Como o módulo é Low Level, colocamos em HIGH imediatamente para ele iniciar em silêncio
-  pinMode(BUZZER, OUTPUT); // [cite: 8]
-  digitalWrite(BUZZER, HIGH); 
+  pinMode(BUZZER, OUTPUT); 
+  digitalWrite(BUZZER, HIGH); // Módulo Low Level inicia desligado
   
-  pinMode(BTN_UP, INPUT_PULLUP); // [cite: 8]
-  pinMode(BTN_DOWN, INPUT_PULLUP); // [cite: 8]
-  pinMode(BTN_LEFT, INPUT_PULLUP); // [cite: 8]
-  pinMode(BTN_RIGHT, INPUT_PULLUP); // [cite: 8]
-  pinMode(BTN_A, INPUT_PULLUP); // [cite: 8]
-  pinMode(BTN_X, INPUT_PULLUP); // [cite: 9]
-  pinMode(BTN_Y, INPUT_PULLUP); // [cite: 9]
+  pinMode(BTN_UP, INPUT_PULLUP); 
+  pinMode(BTN_DOWN, INPUT_PULLUP); 
+  pinMode(BTN_LEFT, INPUT_PULLUP); 
+  pinMode(BTN_RIGHT, INPUT_PULLUP); 
+  pinMode(BTN_A, INPUT_PULLUP); 
+  pinMode(BTN_X, INPUT_PULLUP); 
+  pinMode(BTN_Y, INPUT_PULLUP); 
 
-  SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS); // [cite: 9]
-  tft.begin(); // [cite: 9]
-  tft.setRotation(1); // [cite: 9]
+  SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS); 
+  tft.begin(); 
+  tft.setRotation(1); 
 }
 
 void loop() {
@@ -133,7 +137,7 @@ void loop() {
       digitalWrite(TFT_LED, HIGH); 
       estado = MENU;               
       selectedPhase = 0;
-      emitirSom(150, 2); // Som de boot: bipes rápidos em Low Level
+      emitirSom(150, 2); 
     }
   }
 
@@ -150,17 +154,10 @@ void loop() {
         selectedPhase = 0; 
         emitirSom(100, 1);
       } else {
-        // --- SELEÇÃO DE SAIR COM DEEP SLEEP ---
         tft.fillScreen(PCB_DARK); 
-        digitalWrite(TFT_LED, LOW); // Apaga a tela
-        emitirSom(250, 1);          // Som de desligamento
-        delay(500);                 // Pequena pausa para garantir que o som acabou
-        
-        // Configura o pino 8 (BTN_A) para acordar o ESP32 quando for para nível BAIXO (LOW)
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_A, 0); 
-        
-        // Coloca o ESP32 no modo de desligamento profundo
-        esp_deep_sleep_start(); 
+        digitalWrite(TFT_LED, LOW); 
+        estado = TELA_DESLIGADA;    
+        emitirSom(250, 1); 
       }
     }
   }
@@ -180,7 +177,7 @@ void loop() {
         estado = DIALOGO;
         emitirSom(80, 2);
       } else {
-        emitirSom(300, 1); // Erro de travado
+        emitirSom(300, 1); 
       }
     }
   }
@@ -215,29 +212,35 @@ void loop() {
 
     if (moveu) {
       pressionou = true;
-      emitirSom(20, 1); // Clique sutil de movimento
-      desenharSlot(oldX, oldY); // [cite: 17]
-      desenharCursor(cursorX, cursorY, CURSOR_GOLD); // [cite: 18]
+      emitirSom(20, 1); 
+      desenharSlot(oldX, oldY); 
+      desenharCursor(cursorX, cursorY, CURSOR_GOLD); 
     }
 
     if (digitalRead(BTN_A) == LOW) {
       pressionou = true;
-      emitirSom(60, 1); 
-      if (componenteSelecionado == 5) { // [cite: 20]
-        gradeCircuitos[cursorX][cursorY] = 0; // [cite: 20]
+      
+      // Impede o jogador de sobrescrever ou deletar o BTN fixo gerado pelo cenário
+      if (faseAtual >= 1 && cursorX == btnFixoX && cursorY == btnFixoY) {
+        emitirSom(300, 1); // Som de erro se tentar mexer no BTN fixo
       } else {
-        gradeCircuitos[cursorX][cursorY] = componenteSelecionado; // [cite: 21]
+        emitirSom(60, 1); 
+        if (componenteSelecionado == 5) { 
+          gradeCircuitos[cursorX][cursorY] = 0; 
+        } else {
+          gradeCircuitos[cursorX][cursorY] = componenteSelecionado; 
+        }
+        desenharSlot(cursorX, cursorY); 
+        desenharCursor(cursorX, cursorY, CURSOR_GOLD); 
       }
-      desenharSlot(cursorX, cursorY); // [cite: 22]
-      desenharCursor(cursorX, cursorY, CURSOR_GOLD); // [cite: 22]
     }
 
     if (digitalRead(BTN_X) == LOW) {
       pressionou = true;
       emitirSom(40, 1); 
-      componenteFocadoMenu++; // [cite: 24]
-      if (componenteFocadoMenu > 5) componenteFocadoMenu = 1; // [cite: 24]
-      atualizarVisualMenu(); // [cite: 25]
+      componenteFocadoMenu++; 
+      if (componenteFocadoMenu > 5) componenteFocadoMenu = 1; 
+      atualizarVisualMenu(); 
     }
 
     if (digitalRead(BTN_Y) == LOW) {
@@ -245,17 +248,22 @@ void loop() {
       if (digitalRead(BTN_UP) == LOW) { 
         if (validarCircuito()) {
           estado = SUCESSO;
-          emitirSom(100, 3); // Fanfarra de vitória (3 bipes rápidos)
+          // Se for a fase 3 ou 4, o buzzer real faz a festa na vitória!
+          if (faseAtual >= 2) {
+            emitirSom(80, 5);
+          } else {
+            emitirSom(100, 3);
+          }
         } else {
           tft.fillRect(40, 70, 240, 80, COLOR_RED);
           tft.drawRect(40, 70, 240, 80, TEXT_WHITE);
           tft.setCursor(65, 90); tft.setTextColor(TEXT_YELLOW); tft.setTextSize(2);
-          tft.print("SEM RESISTOR!");
-          tft.setCursor(75, 120); tft.setTextSize(1);
-          tft.print("OU CIRCUITO ISOLADO!");
+          tft.print("ERRO ELETRICO!");
+          tft.setCursor(55, 120); tft.setTextSize(1);
+          tft.print("CHEQUE BAT, RES E CONEXOES!");
           
-          emitirSom(600, 1); // Som bem longo simulando a explosão (600ms ligado em LOW)
-          delay(1400); // Complementa o tempo total de resposta
+          emitirSom(600, 1); 
+          delay(1400); 
           
           faseAtual = 0;
           selectedPhase = 0;
@@ -263,8 +271,8 @@ void loop() {
         }
       } else {
         emitirSom(60, 1); 
-        componenteSelecionado = componenteFocadoMenu; // [cite: 27]
-        atualizarVisualMenu(); // [cite: 27]
+        componenteSelecionado = componenteFocadoMenu; 
+        atualizarVisualMenu(); 
       }
     }
   }
@@ -302,24 +310,11 @@ void loop() {
   }
 }
 
-// --- FUNÇÃO CUSTOMIZADA DE ÁUDIO PARA LOW LEVEL TRIGGER ---
-// Gera bipes de teste sem travar a temporização global por onda quadrada em hardware
-void emitirSom(int tempoLigadoMs, int repeticoes) {
-  for (int i = 0; i < repeticoes; i++) {
-    digitalWrite(BUZZER, LOW);  // Põe em 0V -> LIGA o módulo Low Level
-    delay(tempoLigadoMs);       // Aguarda o som ser gerado
-    digitalWrite(BUZZER, HIGH); // Põe em 3.3V -> DESLIGA o módulo Low Level
-    if (repeticoes > 1) {
-      delay(tempoLigadoMs / 2); // Intervalo entre bipes se houver repetição
-    }
-  }
-}
-
 // --- RENDERIZADORES DE TELA ---
 void renderizarEstado() {
   if (estado == TELA_DESLIGADA) return; 
   
-  tft.fillScreen(PCB_DARK); // [cite: 9]
+  tft.fillScreen(PCB_DARK); 
 
   if (estado == MENU) {
     tft.setCursor(35, 50); tft.setTextColor(TEXT_CYAN); tft.setTextSize(3);
@@ -388,10 +383,10 @@ void renderizarEstado() {
   }
 
   else if (estado == PUZZLE) {
-    desenharGrade(); // [cite: 9]
-    desenharUI(); // [cite: 9]
-    atualizarVisualMenu(); // [cite: 10]
-    desenharCursor(cursorX, cursorY, CURSOR_GOLD); // [cite: 10]
+    desenharGrade(); 
+    desenharUI(); 
+    atualizarVisualMenu(); 
+    desenharCursor(cursorX, cursorY, CURSOR_GOLD); 
   }
 
   else if (estado == SUCESSO) {
@@ -434,6 +429,11 @@ void reiniciarFase() {
   cursorY = 0;
   componenteSelecionado = 1;
   componenteFocadoMenu = 1;
+
+  // Se for Fase 2, 3 ou 4, injeta o componente fixo BTN (ID 9) no cenário predeterminado
+  if (faseAtual >= 1) {
+    gradeCircuitos[btnFixoX][btnFixoY] = 9; 
+  }
 }
 
 int contarVizinhosConectados(int x, int y) {
@@ -454,7 +454,7 @@ int contarVizinhosConectados(int x, int y) {
 }
 
 bool validarCircuito() {
-  int countRES = 0, countLED = 0, countCAP = 0, countWIRE = 0;
+  int countRES = 0, countBAT = 0, countWIRE = 0, countLED = 0, countBTN = 0;
   int componentesTotais = 0;
   bool possuiComponenteIsolado = false;
 
@@ -465,9 +465,10 @@ bool validarCircuito() {
       if (tipo != 0) { 
         componentesTotais++;
         if (tipo == 1) countRES++;
-        if (tipo == 2) countCAP++;
+        if (tipo == 2) countBAT++;
         if (tipo == 3) countWIRE++;
         if (tipo == 4) countLED++;
+        if (tipo == 9) countBTN++; // Registra o bloco BTN fixo
 
         if (contarVizinhosConectados(x, y) == 0) {
           possuiComponenteIsolado = true;
@@ -476,93 +477,114 @@ bool validarCircuito() {
     }
   }
 
-  if (possuiComponenteIsolado || componentesTotais < 2) {
+  // Validação elétrica base: Bateria e Resistor essenciais em absolutamente todas as fases
+  if (possuiComponenteIsolado || componentesTotais < 2 || countBAT < 1 || countRES < 1) {
     return false; 
   }
 
   switch (faseAtual) {
-    case 0: 
-      return (countRES >= 1 && countLED >= 1);
-    case 1: 
-      return (countRES >= 1 && countLED >= 1 && countWIRE >= 1);
-    case 2: 
-      return (countRES >= 1 && countLED >= 1 && countCAP >= 1);
-    case 3: 
-      return (countRES >= 1 && countLED >= 1 && countWIRE >= 1 && countCAP >= 1);
+    case 0: // Fase 1: Bat + Resistor + LED obrigatório
+      return (countLED >= 1);
+      
+    case 1: // Fase 2: Bat + Resistor + LED + Conectado ao BTN fixo através de WIRE
+      return (countLED >= 1 && countBTN == 1 && contarVizinhosConectados(btnFixoX, btnFixoY) >= 1);
+      
+    case 2: // Fase 3: Bat + Resistor + LED + Conectado ao BTN + Exigência de som (valida montagem igual)
+      return (countLED >= 1 && countBTN == 1 && contarVizinhosConectados(btnFixoX, btnFixoY) >= 1);
+      
+    case 3: // Fase 4: Fase Final Completa
+      return (countLED >= 1 && countBTN == 1 && countWIRE >= 1);
+      
     default:
       return false;
   }
 }
 
 void desenharGrade() {
-  tft.fillRoundRect(80, 2, 160, 21, 5, COLOR_UI_BLUE); // [cite: 28]
-  tft.setCursor(90, 7); tft.setTextColor(TEXT_WHITE); tft.setTextSize(1); // [cite: 28]
-  tft.print(fases[faseAtual].titulo); // [cite: 28]
+  tft.fillRoundRect(80, 2, 160, 21, 5, COLOR_UI_BLUE); 
+  tft.setCursor(90, 7); tft.setTextColor(TEXT_WHITE); tft.setTextSize(1); 
+  tft.print(fases[faseAtual].titulo); 
 
-  for (int i = 0; i < 5; i++) { // [cite: 29]
-    for (int j = 0; j < 4; j++) { // [cite: 29]
-      desenharSlot(i, j); // [cite: 29]
+  for (int i = 0; i < 5; i++) { 
+    for (int j = 0; j < 4; j++) { 
+      desenharSlot(i, j); 
     }
   }
 }
 
 void desenharSlot(int x, int y) {
-  int px = offsetGridX + (x * slotSize); // [cite: 30]
-  int py = offsetGridY + (y * slotSize); // [cite: 31]
-  int currentSlotSize = 39; // [cite: 31]
-  tft.fillRect(px - 2, py - 2, currentSlotSize + 4, currentSlotSize + 4, PCB_DARK); // [cite: 32]
-  tft.fillRoundRect(px, py, currentSlotSize, currentSlotSize, 4, 0x18C3); // [cite: 32]
-  tft.drawRoundRect(px, py, currentSlotSize, currentSlotSize, 4, SLOT_GRAY);  // [cite: 33]
+  int px = offsetGridX + (x * slotSize); 
+  int py = offsetGridY + (y * slotSize); 
+  int currentSlotSize = 39; 
+  tft.fillRect(px - 2, py - 2, currentSlotSize + 4, currentSlotSize + 4, PCB_DARK); 
+  tft.fillRoundRect(px, py, currentSlotSize, currentSlotSize, 4, 0x18C3); 
+  tft.drawRoundRect(px, py, currentSlotSize, currentSlotSize, 4, SLOT_GRAY);  
 
-  int tipo = gradeCircuitos[x][y]; // [cite: 33]
-  if (tipo == 1) {  // [cite: 34]
-    tft.fillRect(px + 4, py + 14, 31, 10, ILI9341_ORANGE); // [cite: 34]
-    tft.setCursor(px + 11, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("RES"); // [cite: 35]
+  int tipo = gradeCircuitos[x][y]; 
+  if (tipo == 1) {  
+    tft.fillRect(px + 4, py + 14, 31, 10, ILI9341_ORANGE); 
+    tft.setCursor(px + 11, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("RES"); 
   } 
-  else if (tipo == 2) {  // [cite: 35]
-    tft.fillRect(px + 4, py + 14, 31, 10, ILI9341_BLUE); // [cite: 35]
-    tft.setCursor(px + 11, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("CAP"); // [cite: 36]
+  else if (tipo == 2) {  // Atualizado para Bateria (BAT)
+    tft.fillRect(px + 4, py + 11, 31, 16, 0x7BE0); // Cinza/Verde metálico
+    tft.setCursor(px + 11, py + 15); tft.setTextColor(TEXT_WHITE); tft.print("BAT"); 
   } 
-  else if (tipo == 3) {  // [cite: 36]
-    tft.fillRect(px + 3, py + 17, 33, 4, ILI9341_WHITE); // [cite: 36]
+  else if (tipo == 3) {  
+    tft.fillRect(px + 3, py + 17, 33, 4, ILI9341_WHITE); 
   } 
-  else if (tipo == 4) {  // [cite: 37]
-    tft.fillCircle(px + 19, py + 19, 9, COLOR_RED); // [cite: 37]
-    tft.setCursor(px + 16, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("L"); // [cite: 38]
+  else if (tipo == 4) {  
+    tft.fillCircle(px + 19, py + 19, 9, COLOR_RED); 
+    tft.setCursor(px + 16, py + 16); tft.setTextColor(TEXT_WHITE); tft.print("L"); 
+  }
+  else if (tipo == 9) { // Quadrado branco escrito BTN (Botão Predeterminado)
+    tft.fillRoundRect(px + 2, py + 2, currentSlotSize - 4, currentSlotSize - 4, 3, TEXT_WHITE);
+    tft.setCursor(px + 11, py + 16); tft.setTextColor(PCB_DARK); tft.setTextSize(1);
+    tft.print("BTN");
   }
 }
 
 void desenharCursor(int x, int y, uint16_t cor) {
-  int px = offsetGridX + (x * slotSize); // [cite: 38]
-  int py = offsetGridY + (y * slotSize); // [cite: 39]
-  int currentSlotSize = 39; // [cite: 39]
-  tft.drawRoundRect(px - 1, py - 1, currentSlotSize + 2, currentSlotSize + 2, 5, cor); // [cite: 40]
-  tft.drawRoundRect(px - 2, py - 2, currentSlotSize + 4, currentSlotSize + 4, 6, cor); // [cite: 41]
+  int px = offsetGridX + (x * slotSize); 
+  int py = offsetGridY + (y * slotSize); 
+  int currentSlotSize = 39; 
+  tft.drawRoundRect(px - 1, py - 1, currentSlotSize + 2, currentSlotSize + 2, 5, cor); 
+  tft.drawRoundRect(px - 2, py - 2, currentSlotSize + 4, currentSlotSize + 4, 6, cor); 
 }
 
 void desenharUI() {
-  tft.fillRoundRect(10, 203, 300, 34, 6, 0x2104); // [cite: 42]
-  tft.drawRoundRect(10, 203, 300, 34, 6, SLOT_GRAY); // [cite: 42]
-  const char* labels[] = {"RES", "CAP", "WIRE", "LED", "DEL"}; // [cite: 43]
-  int btnWidth = 54; // [cite: 43]
-  for(int i = 0; i < 5; i++) { // [cite: 44]
-    int startX = 15 + (i * 58); // [cite: 45]
-    tft.fillRoundRect(startX, 207, btnWidth, 26, 4, 0x3186); // [cite: 45]
-    tft.setCursor(startX + (btnWidth - (strlen(labels[i]) * 6)) / 2, 216); // [cite: 45]
-    tft.setTextColor(TEXT_WHITE); tft.print(labels[i]); // [cite: 45]
+  tft.fillRoundRect(10, 203, 300, 34, 6, 0x2104); 
+  tft.drawRoundRect(10, 203, 300, 34, 6, SLOT_GRAY); 
+  const char* labels[] = {"RES", "BAT", "WIRE", "LED", "DEL"}; // CAP alterado para BAT no menu
+  int btnWidth = 54; 
+  for(int i = 0; i < 5; i++) { 
+    int startX = 15 + (i * 58); 
+    tft.fillRoundRect(startX, 207, btnWidth, 26, 4, 0x3186); 
+    tft.setCursor(startX + (btnWidth - (strlen(labels[i]) * 6)) / 2, 216); 
+    tft.setTextColor(TEXT_WHITE); tft.print(labels[i]); 
   }
 }
 
 void atualizarVisualMenu() {
-  desenharUI(); // [cite: 46]
-  int btnWidth = 54; // [cite: 46]
+  desenharUI(); 
+  int btnWidth = 54; 
 
-  int idxFoco = componenteFocadoMenu - 1; // [cite: 46]
-  int startXFoco = 15 + (idxFoco * 58); // [cite: 47]
-  tft.drawRoundRect(startXFoco - 2, 204, btnWidth + 4, 32, 6, CURSOR_GOLD); // [cite: 47]
+  int idxFoco = componenteFocadoMenu - 1; 
+  int startXFoco = 15 + (idxFoco * 58); 
+  tft.drawRoundRect(startXFoco - 2, 204, btnWidth + 4, 32, 6, CURSOR_GOLD); 
 
-  int idxAtivo = componenteSelecionado - 1; // [cite: 48]
-  int startXAtivo = 15 + (idxAtivo * 58); // [cite: 49]
-  tft.drawRoundRect(startXAtivo, 207, btnWidth, 26, 4, ILI9341_WHITE); // [cite: 49]
-  tft.drawRoundRect(startXAtivo + 1, 208, btnWidth - 2, 24, 4, ILI9341_WHITE); // [cite: 50]
+  int idxAtivo = componenteSelecionado - 1; 
+  int startXAtivo = 15 + (idxAtivo * 58); 
+  tft.drawRoundRect(startXAtivo, 207, btnWidth, 26, 4, ILI9341_WHITE); 
+  tft.drawRoundRect(startXAtivo + 1, 208, btnWidth - 2, 24, 4, ILI9341_WHITE); 
+}
+
+void emitirSom(int tempoLigadoMs, int repeticoes) {
+  for (int i = 0; i < repeticoes; i++) {
+    digitalWrite(BUZZER, LOW);  
+    delay(tempoLigadoMs);       
+    digitalWrite(BUZZER, HIGH); 
+    if (repeticoes > 1) {
+      delay(tempoLigadoMs / 2); 
+    }
+  }
 }
